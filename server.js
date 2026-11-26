@@ -1,13 +1,14 @@
 const express = require('express');
 const fs = require('fs');
+const path = require('path');
 // API Key などの環境変数は .env.local から読み込む
-require('dotenv').config({ path: '.env.local' });
+require('dotenv').config({ path: path.join(__dirname, '.env.local') });
 
 const app = express();
 const PORT = process.env.PORT || 8080;
 
 app.use(express.json());
-app.use(express.static('public'));
+app.use(express.static(path.join(__dirname, 'public')));
 
 // ===== 設定 =====
 // 利用するLLMプロバイダを選択します（'openai' または 'gemini'）
@@ -22,7 +23,7 @@ const MODEL = MODELS[PROVIDER];
 
 let promptTemplate;
 try {
-    promptTemplate = fs.readFileSync('prompt.md', 'utf8');
+    promptTemplate = fs.readFileSync(path.join(__dirname, 'prompt.md'), 'utf8');
 } catch (error) {
     console.error('Error reading prompt.md:', error);
     process.exit(1);
@@ -30,32 +31,85 @@ try {
 
 const OPENAI_API_ENDPOINT = 'https://api.openai.com/v1/chat/completions';
 const GEMINI_API_BASE_URL = 'https://generativelanguage.googleapis.com/v1beta/models/';
-
-// public/ 内の .html 一覧を返す（index.html がこの一覧を使ってリンクを表示する）
-app.get('/api/pages', (req, res) => {
-    const files = fs.readdirSync('public')
-        .filter(name => name.endsWith('.html') && name !== 'index.html');
-    res.json(files);
-});
-
-// 問題数の上限（過剰なリクエストでトークンを浪費しないようにする）
-const MAX_COUNT = 20;
+const PLAN_RESPONSE_FORMAT = {
+    type: 'json_schema',
+    json_schema: {
+        name: 'oshi_activity_plan',
+        strict: true,
+        schema: {
+            type: 'object',
+            additionalProperties: false,
+            properties: {
+                schedule: {
+                    type: 'array',
+                    minItems: 4,
+                    maxItems: 7,
+                    items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                            time: { type: 'string' },
+                            title: { type: 'string' },
+                            detail: { type: 'string' },
+                        },
+                        required: ['time', 'title', 'detail'],
+                    },
+                },
+                checklist: {
+                    type: 'array',
+                    minItems: 6,
+                    maxItems: 10,
+                    items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                            item: { type: 'string' },
+                            reason: { type: 'string' },
+                        },
+                        required: ['item', 'reason'],
+                    },
+                },
+                budget: {
+                    type: 'array',
+                    minItems: 3,
+                    maxItems: 6,
+                    items: {
+                        type: 'object',
+                        additionalProperties: false,
+                        properties: {
+                            category: { type: 'string' },
+                            amount: { type: 'integer', minimum: 0 },
+                            note: { type: 'string' },
+                        },
+                        required: ['category', 'amount', 'note'],
+                    },
+                },
+                advice: { type: 'array', minItems: 3, maxItems: 5, items: { type: 'string' } },
+            },
+            required: ['schedule', 'checklist', 'budget', 'advice'],
+        },
+    },
+};
 
 app.post('/api/', async (req, res) => {
     try {
-        // title と、変数置換に使うその他のキーを受け取る
-        // （prompt.md がプロンプトを定義するので、リクエストでの上書きは許可しない）
-        const { title = 'Generated Content', ...variables } = req.body;
+        // title と、prompt.md の変数置換に使う値を受け取る
+        const body = req.body && typeof req.body === 'object' ? req.body : {};
+        const { title = 'Generated Content', ...variables } = body;
 
-        // count が指定されている場合は 1〜MAX_COUNT の範囲に収める
-        if (variables.count !== undefined) {
-            const count = Number(variables.count);
-            if (!Number.isInteger(count) || count < 1 || count > MAX_COUNT) {
-                return res.status(400).json({
-                    error: `count must be an integer between 1 and ${MAX_COUNT}`,
-                });
-            }
+        const requiredTextFields = [
+            'oshiName', 'eventName', 'venue', 'eventDate', 'startTime',
+            'favoriteColor',
+        ];
+        if (requiredTextFields.some(key => typeof variables[key] !== 'string' || !variables[key].trim())) {
+            return res.status(400).json({ error: 'すべてのイベント情報を入力してください。' });
         }
+
+        const budget = Number(variables.budget);
+        if (!Number.isFinite(budget) || budget < 1 || budget > 10000000) {
+            return res.status(400).json({ error: '予算は1円以上、1,000万円以下で入力してください。' });
+        }
+        variables.budget = budget;
 
         // prompt.md のテンプレート変数 ${key} をリクエストの値で置換する
         const finalPrompt = fillTemplate(promptTemplate, variables);
@@ -77,11 +131,11 @@ app.post('/api/', async (req, res) => {
     } catch (error) {
         // 詳細はサーバーログにのみ出力し、クライアントには汎用メッセージを返す
         console.error('API Error:', error);
-        res.status(500).json({ error: 'Failed to generate content. Please try again.' });
+        res.status(500).json({ error: 'プランの作成に失敗しました。API設定や通信状況を確認して、もう一度お試しください。' });
     }
 });
 
-// prompt.md 内の ${key} を variables の値で安全に置換する
+// prompt.md 内の ${key} を variables の対応する値で置換する
 function fillTemplate(template, variables) {
     return template.replace(/\$\{(\w+)\}/g, (match, key) => {
         return Object.prototype.hasOwnProperty.call(variables, key)
@@ -107,8 +161,9 @@ async function callOpenAI(prompt) {
             messages: [
                 { role: 'system', content: prompt }
             ],
-            max_completion_tokens: 2000,
-            response_format: { type: "json_object" }
+            reasoning_effort: 'low',
+            max_completion_tokens: 3000,
+            response_format: PLAN_RESPONSE_FORMAT
         })
     });
 
@@ -119,7 +174,7 @@ async function callOpenAI(prompt) {
 
     const data = await response.json();
     const responseText = data.choices[0].message.content;
-    return extractArray(responseText);
+    return parseJsonObject(responseText);
 }
 
 async function callGemini(prompt) {
@@ -140,8 +195,8 @@ async function callGemini(prompt) {
             generationConfig: {
                 // 思考型モデルでは思考トークンもこの上限に含まれるため、余裕を持たせる
                 maxOutputTokens: 8192,
-                response_mime_type: "application/json",
-                // クイズ生成に深い思考は不要。HIGH（既定）だと思考で上限に達し JSON が途中で切れることがある
+                responseMimeType: "application/json",
+                // プラン生成に深い思考は不要。HIGH（既定）だと思考で上限に達し JSON が途中で切れることがある
                 thinkingConfig: { thinkingLevel: "LOW" }
             }
         })
@@ -154,11 +209,11 @@ async function callGemini(prompt) {
 
     const data = await response.json();
     const responseText = data.candidates[0].content.parts[0].text;
-    return extractArray(responseText);
+    return parseJsonObject(responseText);
 }
 
-// LLM が返した JSON 文字列をパースし、最初に見つかった配列を取り出す
-function extractArray(responseText) {
+// LLM が返した JSON オブジェクトをパースする
+function parseJsonObject(responseText) {
     let parsedData;
     try {
         parsedData = JSON.parse(responseText);
@@ -166,11 +221,10 @@ function extractArray(responseText) {
         throw new Error('Failed to parse LLM response: ' + parseError.message);
     }
 
-    const arrayData = Object.values(parsedData).find(Array.isArray);
-    if (!arrayData) {
-        throw new Error('No array found in the LLM response object.');
+    if (!parsedData || typeof parsedData !== 'object' || Array.isArray(parsedData)) {
+        throw new Error('LLM response must be a JSON object.');
     }
-    return arrayData;
+    return parsedData;
 }
 
 app.listen(PORT, () => {

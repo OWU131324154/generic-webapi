@@ -1,44 +1,183 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>アプリ一覧</title>
-    <style>
-        body { font-family: sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #333; }
-        h1 { font-size: 1.4rem; }
-        ul { list-style: none; padding: 0; }
-        li { padding: 12px 0; border-bottom: 1px solid #eee; }
-        a { font-size: 1.1rem; text-decoration: none; color: #0366d6; }
-    </style>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta name="theme-color" content="#f6f1ff">
+    <meta name="description" content="ライブやイベントの日をもっと楽しむための、AI推し活プランナー。">
+    <title>AI推し活プランナー</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+    <script src="app.js" defer></script>
 </head>
 <body>
-    <h1>アプリ一覧</h1>
-    <ul id="appList"></ul>
+    <div class="page-shell">
+        <header class="site-header">
+            <a class="brand" href="/" aria-label="AI推し活プランナー ホーム">
+                <span class="brand-mark" aria-hidden="true">✦</span>
+                <span>oshi plan</span>
+            </a>
+            <span class="header-note"><span aria-hidden="true">♡</span> your special day, planned with AI</span>
+        </header>
 
-    <script>
-        // サーバーから .html ファイルの一覧を取得してリンクを表示する
-        async function loadPages() {
-            const response = await fetch('/api/pages');
-            const files = await response.json();
+        <main>
+            <section class="hero" aria-labelledby="page-title">
+                <div class="hero-copy">
+                    <p class="eyebrow"><span aria-hidden="true">✧</span> make your oshi day special</p>
+                    <h1 id="page-title">推しに会う日を、<br><span>もっとたのしく。</span></h1>
+                    <p class="hero-description">ライブやイベントの予定を入力して、<br class="desktop-break">あなただけの推し活プランを作ろう。</p>
+                    <div class="hero-tags" aria-label="プランに含まれる内容">
+                        <span>✦ 当日のスケジュール</span>
+                        <span>♡ 持ち物リスト</span>
+                        <span>✧ 予算の目安</span>
+                    </div>
+                </div>
+                <div class="hero-art" aria-hidden="true">
+                    <div class="orbit orbit-one"></div>
+                    <div class="orbit orbit-two"></div>
+                    <div class="sparkle sparkle-one">✦</div>
+                    <div class="sparkle sparkle-two">✧</div>
+                    <div class="sparkle sparkle-three">♡</div>
+                    <div class="ticket-card"><span>your day</span><strong>推し活<br>プラン</strong><i>✧</i></div>
+                </div>
+            </section>
 
-            const list = document.getElementById('appList');
-            if (files.length === 0) {
-                list.innerHTML = '<li>public/ に .html ファイルがありません。</li>';
-                return;
-            }
+            <section class="how-to" aria-labelledby="howToTitle">
+                <div class="how-to-heading">
+                    <p class="section-kicker">HOW TO USE</p>
+                    <h2 id="howToTitle">使い方はかんたん <span aria-hidden="true">✧</span></h2>
+                </div>
+                <ol class="how-to-steps">
+                    <li><span>01</span><p>推しとイベントの情報を入力</p></li>
+                    <li><span>02</span><p>AIのプランをチェック</p></li>
+                    <li><span>03</span><p>持ち物を確認して準備</p></li>
+                    <li><span>04</span><p>プランを保存してあとから確認</p></li>
+                </ol>
+            </section>
 
-            files.forEach(name => {
-                const li = document.createElement('li');
-                const a = document.createElement('a');
-                a.href = name;
-                a.textContent = name;
-                li.appendChild(a);
-                list.appendChild(li);
-            });
-        }
+            <section class="saved-plans" aria-labelledby="savedPlansTitle">
+                <div class="saved-plans-heading">
+                    <div>
+                        <p class="section-kicker">YOUR SAVED PLANS</p>
+                        <h2 id="savedPlansTitle">保存したプラン <span aria-hidden="true">♡</span></h2>
+                    </div>
+                    <span class="saved-count" id="savedPlanCount">0件</span>
+                </div>
+                <p class="saved-plans-note">保存したプランは、このブラウザーに記録されます。</p>
+                <ul class="saved-plan-list" id="savedPlanList"></ul>
+            </section>
 
-        loadPages();
-    </script>
+            <section class="form-card" aria-labelledby="form-title">
+                <div class="section-heading">
+                    <div class="section-icon" aria-hidden="true">✎</div>
+                    <div>
+                        <p class="section-kicker">LET'S PLAN TOGETHER</p>
+                        <h2 id="form-title">イベントのことを教えてね</h2>
+                    </div>
+                    <span class="required-note">すべて入力してください</span>
+                </div>
+
+                <form id="plannerForm">
+                    <div class="form-grid">
+                        <div class="field">
+                            <label for="oshiName">推し・グループの名前</label>
+                            <input id="oshiName" name="oshiName" type="text" maxlength="80" placeholder="例：〇〇、△△グループ" required>
+                        </div>
+                        <div class="field">
+                            <label for="eventName">イベント名</label>
+                            <input id="eventName" name="eventName" type="text" maxlength="100" placeholder="例：ホールツアー 東京公演" required>
+                        </div>
+                        <div class="field">
+                            <label for="venue">会場</label>
+                            <input id="venue" name="venue" type="text" maxlength="100" placeholder="例：〇〇ホール" required>
+                        </div>
+                        <div class="field">
+                            <label for="eventDate">イベントの日付</label>
+                            <input id="eventDate" name="eventDate" type="date" required>
+                        </div>
+                        <div class="field">
+                            <label for="startTime">開演時間</label>
+                            <input id="startTime" name="startTime" type="time" required>
+                        </div>
+                        <div class="field">
+                            <label for="budget">予算 <span class="field-hint">円</span></label>
+                            <div class="input-with-unit">
+                                <input id="budget" name="budget" type="number" min="1" max="10000000" step="1" inputmode="numeric" placeholder="例：20000" required>
+                                <span>円</span>
+                            </div>
+                        </div>
+                        <div class="field color-field">
+                            <label for="favoriteColor">推しカラー</label>
+                            <div class="color-inputs">
+                                <label class="color-picker" for="favoriteColor" title="色を選ぶ">
+                                    <input id="favoriteColor" name="favoriteColor" type="color" value="#b8a0e8" aria-label="推しカラーを選択">
+                                    <span id="colorSwatch" class="color-swatch" aria-hidden="true"></span>
+                                </label>
+                                <span class="color-value" id="colorValue">#B8A0E8</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="form-footer">
+                        <p><span aria-hidden="true">✧</span> あとからチェックリストを編集できます</p>
+                        <button class="primary-button" id="generateButton" type="submit">
+                            <span>わたしのプランを作る</span><span aria-hidden="true">✦</span>
+                        </button>
+                    </div>
+                </form>
+            </section>
+
+            <p class="status-message" id="statusMessage" role="status" aria-live="polite"></p>
+
+            <section class="results" id="results" hidden aria-labelledby="resultsTitle">
+                <div class="results-heading">
+                    <div>
+                        <p class="section-kicker">YOUR Oshi DAY</p>
+                        <h2 id="resultsTitle">今日の推し活プラン <span aria-hidden="true">♡</span></h2>
+                        <p class="results-subtitle" id="resultsSubtitle"></p>
+                    </div>
+                    <div class="results-actions">
+                        <button class="save-button" id="savePlanButton" type="button" disabled>プランを保存 ♡</button>
+                        <button class="text-button" id="editPlanButton" type="button">入力を編集する ↗</button>
+                    </div>
+                </div>
+
+                <div class="results-grid">
+                    <article class="result-card schedule-card">
+                        <div class="result-card-heading"><span class="result-icon" aria-hidden="true">◷</span><div><p class="section-kicker">THE DAY</p><h3>当日のスケジュール</h3></div></div>
+                        <p class="card-note">時間は目安です。最新の案内も確認してね。</p>
+                        <ol class="schedule-list" id="scheduleList"></ol>
+                    </article>
+
+                    <article class="result-card checklist-card">
+                        <div class="result-card-heading"><span class="result-icon" aria-hidden="true">♡</span><div><p class="section-kicker">DON'T FORGET</p><h3>持ち物チェックリスト</h3></div></div>
+                        <div class="checklist-progress"><span id="checkProgress">0個 / 0個</span><span class="progress-track"><span id="progressFill"></span></span></div>
+                        <ul class="checklist" id="checklist"></ul>
+                    </article>
+
+                    <article class="result-card budget-card">
+                        <div class="result-card-heading"><span class="result-icon" aria-hidden="true">◎</span><div><p class="section-kicker">BUDGET</p><h3>予算の配分</h3></div></div>
+                        <div class="budget-summary">
+                            <div class="budget-summary-row"><span>入力した予算</span><strong id="budgetLimit"></strong></div>
+                            <div class="budget-summary-row"><span>内訳の合計（AIの概算）</span><strong id="budgetTotal"></strong></div>
+                            <div class="budget-summary-row budget-remaining"><span>残りの予算</span><strong id="budgetRemaining"></strong></div>
+                        </div>
+                        <p class="budget-warning" id="budgetWarning" role="status" hidden></p>
+                        <ul class="budget-list" id="budgetList"></ul>
+                        <p class="budget-footnote">内訳額はAIによる目安です。実際の交通費や物販価格は公式案内等でご確認ください。</p>
+                    </article>
+
+                    <article class="result-card advice-card">
+                        <div class="result-card-heading"><span class="result-icon" aria-hidden="true">✧</span><div><p class="section-kicker">A LITTLE NOTE</p><h3>推し活を楽しむヒント</h3></div></div>
+                        <ul class="advice-list" id="adviceList"></ul>
+                    </article>
+                </div>
+                <p class="disclaimer">プランは入力内容をもとにAIが作成した提案です。開場時間・会場ルール・物販情報などは公式案内で確認してください。</p>
+            </section>
+        </main>
+
+        <footer class="site-footer"><span>made with <b>♡</b> for your oshi</span><span>✧ one day, one special memory ✧</span></footer>
+    </div>
 </body>
 </html>
